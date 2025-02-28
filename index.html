@@ -286,12 +286,15 @@
             } else {
               const yAxis = chart.scales.y;
               const zeroY = yAxis.getPixelForValue(0);
-              const gradientTop = chartArea.top;
               const gradientBottom = chartArea.bottom;
-              const zeroPoint = (zeroY - gradientTop) / (gradientBottom - gradientTop);
+              const gradientHeight = gradientBottom - chartArea.top;
               
+              // Calculate zero point as percentage of total gradient height
+              const zeroPoint = (zeroY - chartArea.top) / gradientHeight;
+              
+              // Adjusted gradient stops with buffer
               gradient.addColorStop(0, 'rgba(46, 204, 113, 0.2)');
-              gradient.addColorStop(zeroPoint - 0.001, 'rgba(46, 204, 113, 0.2)');
+              gradient.addColorStop(zeroPoint - 0.005, 'rgba(46, 204, 113, 0.2)'); // Increased buffer
               gradient.addColorStop(zeroPoint, 'rgba(231, 76, 60, 0.2)');
               gradient.addColorStop(1, 'rgba(231, 76, 60, 0.2)');
               
