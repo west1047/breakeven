@@ -270,36 +270,201 @@
           pointRadius: 4,
           tension: 0.1,
           fill: true,
+          // Replace only the backgroundColor function in your existing chartConfig with this version
           backgroundColor: function(context) {
             const chart = context.chart;
-            const {ctx, chartArea} = chart;
+            const {ctx, chartArea, data} = chart;
             
             if (!chartArea) return null;
             
-            const gradient = ctx.createLinearGradient(0, 0, 0, chartArea.bottom);
-            const data = chart.data.datasets[0].data;
+            // Get the dataset
+            const dataset = data.datasets[0];
+            if (!dataset || !dataset.data) return null;
             
-            if (data.every(val => val < 0)) {
-              return 'rgba(231, 76, 60, 0.2)';
-            } else if (data.every(val => val >= 0)) {
-              return 'rgba(46, 204, 113, 0.2)';
+            // Check if all values are positive or negative
+            if (dataset.data.every(val => val < 0)) {
+              return 'rgba(231, 76, 60, 0.2)'; // All negative - use red
+            } else if (dataset.data.every(val => val >= 0)) {
+              return 'rgba(46, 204, 113, 0.2)'; // All positive - use green
             } else {
-              const yAxis = chart.scales.y;
-              const zeroY = yAxis.getPixelForValue(0);
-              const gradientBottom = chartArea.bottom;
-              const gradientHeight = gradientBottom - chartArea.top;
+              // We have mixed positive and negative values
+              // Get the meta for this dataset to access the points
+              const meta = chart.getDatasetMeta(0);
+              if (!meta || !meta.data || meta.data.length === 0) return null;
               
-              // Calculate zero point as percentage of total gradient height
-              const zeroPoint = (zeroY - chartArea.top) / gradientHeight;
+              // Create a clip path for the chart's line
+              ctx.save();
               
-              // Adjusted gradient stops with buffer
-              gradient.addColorStop(0, 'rgba(46, 204, 113, 0.2)');
-              gradient.addColorStop(zeroPoint - 0.005, 'rgba(46, 204, 113, 0.2)'); // Increased buffer
-              gradient.addColorStop(zeroPoint, 'rgba(231, 76, 60, 0.2)');
-              gradient.addColorStop(1, 'rgba(231, 76, 60, 0.2)');
+              // Create a clip path that follows the line and zero line
+              const zeroY = chart.scales.y.getPixelForValue(0);
               
-              return gradient;
+              // Find where the line crosses zero
+              const points = meta.data.map((point, i) => ({
+                x: point.x,
+                y: point.y,
+                value: dataset.data[i]
+              }));
+              
+              // Find segments where the line is above/below zero
+              let segments = [];
+              let currentSegment = {
+                points: [points[0]],
+                isPositive: points[0].value >= 0
+              };
+              
+              for (let i = 1; i < points.length; i++) {
+                const prev = points[i - 1];
+                const curr = points[i];
+                
+                const crossesZero = (prev.value < 0 && curr.value >= 0) || 
+                                    (prev.value >= 0 && curr.value < 0);
+                
+                if (crossesZero) {
+                  // Calculate the x position where the line crosses zero
+                  const ratio = Math.abs(prev.value) / (Math.abs(prev.value) + Math.abs(curr.value));
+                  const crossX = prev.x + ratio * (curr.x - prev.x);
+                  
+                  // Add intersection point to current segment
+                  currentSegment.points.push({
+                    x: crossX,
+                    y: zeroY,
+                    value: 0
+                  });
+                  
+                  // End current segment
+                  segments.push(currentSegment);
+                  
+                  // Start new segment with opposite sign
+                  currentSegment = {
+                    points: [{
+                      x: crossX,
+                      y: zeroY,
+                      value: 0
+                    }],
+                    isPositive: !currentSegment.isPositive
+                  };
+                }
+                
+                // Add current point to segment
+                currentSegment.points.push(curr);
+              }
+              
+              // Add the last segment
+              segments.push(currentSegment);
+              
+              // Draw each segment with appropriate color
+              ctx.save();
+              
+              // When charting is done, restore context
+              chart.addEventListener('afterDatasetDraw', function() {
+                ctx.restore();
+              }, { once: true });
+              
+              // Return a transparent color since we're handling fill manually
+              return 'rgba(0,0,0,0)';
             }
+          },
+          
+          // Add this custom plugin to your chartConfig object
+          plugins: [
+            {
+              id: 'dualColorFill',
+              beforeDatasetsDraw: function(chart) {
+                const {ctx, chartArea, scales} = chart;
+                if (!chartArea) return;
+                
+                const dataset = chart.data.datasets[0];
+                if (!dataset || !dataset.data) return;
+                
+                // Skip if all values are of the same sign
+                if (dataset.data.every(val => val < 0) || dataset.data.every(val => val >= 0)) {
+                  return;
+                }
+                
+                const zeroY = scales.y.getPixelForValue(0);
+                const meta = chart.getDatasetMeta(0);
+                
+                if (!meta || !meta.data || meta.data.length === 0) return;
+                
+                // Get the line points
+                const points = meta.data.map((point, i) => ({
+                  x: point.x,
+                  y: point.y,
+                  value: dataset.data[i]
+                }));
+                
+                // Create segments
+                let segments = [];
+                let currentSegment = {
+                  points: [points[0]],
+                  isPositive: points[0].value >= 0
+                };
+                
+                for (let i = 1; i < points.length; i++) {
+                  const prev = points[i - 1];
+                  const curr = points[i];
+                  
+                  const crossesZero = (prev.value < 0 && curr.value >= 0) || 
+                                     (prev.value >= 0 && curr.value < 0);
+                  
+                  if (crossesZero) {
+                    // Calculate where line crosses zero
+                    const ratio = Math.abs(prev.value) / (Math.abs(prev.value) + Math.abs(curr.value));
+                    const crossX = prev.x + ratio * (curr.x - prev.x);
+                    
+                    // Add intersection point
+                    currentSegment.points.push({
+                      x: crossX,
+                      y: zeroY,
+                      value: 0
+                    });
+                    
+                    segments.push(currentSegment);
+                    
+                    currentSegment = {
+                      points: [{
+                        x: crossX,
+                        y: zeroY,
+                        value: 0
+                      }],
+                      isPositive: !currentSegment.isPositive
+                    };
+                  }
+                  
+                  currentSegment.points.push(curr);
+                }
+                
+                segments.push(currentSegment);
+                
+                // Draw each segment with appropriate fill
+                segments.forEach(segment => {
+                  if (segment.points.length < 2) return;
+                  
+                  ctx.save();
+                  ctx.beginPath();
+                  
+                  // Start path
+                  ctx.moveTo(segment.points[0].x, segment.points[0].y);
+                  
+                  // Draw through all points
+                  for (let i = 1; i < segment.points.length; i++) {
+                    ctx.lineTo(segment.points[i].x, segment.points[i].y);
+                  }
+                  
+                  // Complete fill area
+                  ctx.lineTo(segment.points[segment.points.length - 1].x, zeroY);
+                  ctx.lineTo(segment.points[0].x, zeroY);
+                  ctx.closePath();
+                  
+                  // Fill with appropriate color
+                  ctx.fillStyle = segment.isPositive ? 'rgba(46, 204, 113, 0.2)' : 'rgba(231, 76, 60, 0.2)';
+                  ctx.fill();
+                  
+                  ctx.restore();
+                });
+              }
+            }
+          ]
           }
         }]
       },
