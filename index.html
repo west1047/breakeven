@@ -253,93 +253,85 @@
     
     const saveButton = document.getElementById('saveButton');
     const restoreButton = document.getElementById('restoreButton');
-    const ctx = document.getElementById('breakEvenChart').getContext('2d');
     
-    // Chart configuration
-    let breakEvenChart = null;
-    const chartConfig = {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Cumulative Profit/Loss',
-          data: [],
-          borderColor: '#3498db',
-          borderWidth: 3,
-          pointBackgroundColor: '#3498db',
-          pointRadius: 4,
-          tension: 0.1,
-          fill: true,
-          backgroundColor: function(context) {
-            const chart = context.chart;
-            const {ctx, chartArea} = chart;
-            
-            if (!chartArea) return null;
-            
-            const gradient = ctx.createLinearGradient(0, 0, 0, chartArea.bottom);
-            const data = chart.data.datasets[0].data;
-            
-            if (data.every(val => val < 0)) {
-              return 'rgba(231, 76, 60, 0.2)';
-            } else if (data.every(val => val >= 0)) {
-              return 'rgba(46, 204, 113, 0.2)';
-            } else {
-              const yAxis = chart.scales.y;
-              const zeroY = yAxis.getPixelForValue(0);
-              const gradientBottom = chartArea.bottom;
-              const gradientHeight = gradientBottom - chartArea.top;
-              
-              // Calculate zero point as percentage of total gradient height
-              const zeroPoint = (zeroY - chartArea.top) / gradientHeight;
-              
-              // Adjusted gradient stops with buffer
-              gradient.addColorStop(0, 'rgba(46, 204, 113, 0.2)');
-              gradient.addColorStop(zeroPoint - 0.005, 'rgba(46, 204, 113, 0.2)'); // Increased buffer
-              gradient.addColorStop(zeroPoint, 'rgba(231, 76, 60, 0.2)');
-              gradient.addColorStop(1, 'rgba(231, 76, 60, 0.2)');
-              
-              return gradient;
-            }
-          }
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-            ticks: {
-              color: 'rgba(255, 255, 255, 0.7)',
-              callback: value => '$' + value.toLocaleString()
-            },
-            title: {
-              display: true,
-              text: 'Cumulative Profit/Loss',
-              color: 'rgba(255, 255, 255, 0.7)'
-            }
-          },
-          x: {
-            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
-            title: {
-              display: true,
-              text: 'Months',
-              color: 'rgba(255, 255, 255, 0.7)'
-            }
-          }
-        },
-        plugins: { legend: { display: false } }
-      }
-    };
-
+	// Chart setup
+	const ctx = document.getElementById('breakEvenChart').getContext('2d');
+	let breakEvenChart = new Chart(ctx, {
+	  type: 'line',
+	  data: {
+	    labels: [],
+	    datasets: [{
+	      label: 'Cumulative Profit/Loss',
+	      data: [],
+	      borderColor: '#3498db',
+	      borderWidth: 3,
+	      pointBackgroundColor: '#3498db',
+	      pointRadius: 4,
+	      tension: 0.1,
+	      fill: true,
+	      backgroundColor: 'rgba(52, 152, 219, 0.2)' // Single blue color with opacity
+	    }]
+	  },
+	  options: {
+	    responsive: true,
+	    maintainAspectRatio: false,
+	    scales: {
+	      y: {
+		grid: {
+		  color: function(context) {
+		    if (context.tick.value === 0) {
+		      return 'rgba(255, 255, 255, 0.8)'; // Bold white line at zero
+		    }
+		    return 'rgba(255, 255, 255, 0.1)'; // Regular grid lines
+		  },
+		  lineWidth: function(context) {
+		    if (context.tick.value === 0) {
+		      return 2; // Thicker line for zero
+		    }
+		    return 1; // Regular grid line width
+		  }
+		},
+		ticks: {
+		  color: 'rgba(255, 255, 255, 0.7)',
+		  callback: function(value) {
+		    return '$' + value.toLocaleString();
+		  }
+		},
+		title: {
+		  display: true,
+		  text: 'Cumulative Profit/Loss',
+		  color: 'rgba(255, 255, 255, 0.7)'
+		}
+	      },
+	      x: {
+		grid: {
+		  color: 'rgba(255, 255, 255, 0.1)'
+		},
+		ticks: {
+		  color: 'rgba(255, 255, 255, 0.7)'
+		},
+		title: {
+		  display: true,
+		  text: 'Months',
+		  color: 'rgba(255, 255, 255, 0.7)'
+		}
+	      }
+	    },
+	    plugins: {
+	      legend: {
+		display: false
+	      }
+	    }
+	  }
+	});
+    
     // Save/restore functionality
     let savedValues = {
       purchasePrice: 200,
       bracesPerMonth: 5,
       initialInvestment: 4000,
       internalCost: 50,
-      monthlyOverhead: 50
+      monthlyOverhead: 50 // Updated default to 50
     };
     
     saveButton.addEventListener('click', () => {
@@ -406,10 +398,14 @@
       const internalCost = parseInt(internalCostInput.value);
       const monthlyOverhead = parseInt(monthlyOverheadInput.value);
       
+      // Monthly revenue and direct costs
       const revenuePerMonth = purchasePrice * bracesPerMonth;
       const directCostsPerMonth = internalCost * bracesPerMonth;
+      
+      // Monthly profit = (revenue - direct costs - overhead) per month
       const monthlyProfit = revenuePerMonth - directCostsPerMonth - monthlyOverhead;
       
+      // Check if business model is feasible (now includes overhead costs)
       if (monthlyProfit <= 0) {
         breakEvenMonthsDisplay.textContent = "Not Feasible";
         breakEvenMonthsDisplay.classList.add('not-feasible');
@@ -420,16 +416,22 @@
           monthlyProfitDisplay.textContent = "Overhead exceeds margin";
         }
         
+        // Show negative profit trend in chart
         updateNotFeasibleChart(initialInvestment, monthlyProfit);
         return;
       }
       
+      // Remove not-feasible class if present
       breakEvenMonthsDisplay.classList.remove('not-feasible');
+      
+      // Break-even point (months) = Initial Investment / Monthly Profit
       const breakEvenMonths = Math.ceil(initialInvestment / monthlyProfit);
       
+      // Update display
       breakEvenMonthsDisplay.textContent = breakEvenMonths;
       monthlyProfitDisplay.textContent = `Monthly Profit: $${monthlyProfit}`;
       
+      // Update chart
       updateChart(initialInvestment, monthlyProfit, breakEvenMonths);
     }
     
@@ -439,14 +441,13 @@
       const data = [];
       
       for (let i = 0; i <= months; i++) {
-        data.push(-initialInvestment + (monthlyProfit * i));
+        const profit = -initialInvestment + (monthlyProfit * i);
+        data.push(profit);
       }
       
-      if (breakEvenChart) breakEvenChart.destroy();
-      
-      chartConfig.data.labels = labels;
-      chartConfig.data.datasets[0].data = data;
-      breakEvenChart = new Chart(ctx, chartConfig);
+      breakEvenChart.data.labels = labels;
+      breakEvenChart.data.datasets[0].data = data;
+      breakEvenChart.update();
     }
     
     function updateNotFeasibleChart(initialInvestment, monthlyProfit) {
@@ -455,14 +456,13 @@
       const data = [];
       
       for (let i = 0; i <= months; i++) {
-        data.push(-initialInvestment + (monthlyProfit * i));
+        const profit = -initialInvestment + (monthlyProfit * i);
+        data.push(profit);
       }
       
-      if (breakEvenChart) breakEvenChart.destroy();
-      
-      chartConfig.data.labels = labels;
-      chartConfig.data.datasets[0].data = data;
-      breakEvenChart = new Chart(ctx, chartConfig);
+      breakEvenChart.data.labels = labels;
+      breakEvenChart.data.datasets[0].data = data;
+      breakEvenChart.update();
     }
     
     // Initial calculation
